@@ -220,9 +220,7 @@ public class EsqueletoGestionDonacionesSangre {
 		creaTablas();
 		
 		PoolDeConexiones pool = PoolDeConexiones.getInstance();		
-		
 		//Relatar caso por caso utilizando el siguiente procedure para inicializar los datos
-		
 		CallableStatement cll_reinicia=null;
 		Connection conn = null;
 		
@@ -236,8 +234,84 @@ public class EsqueletoGestionDonacionesSangre {
 		} finally {
 			if (cll_reinicia!=null) cll_reinicia.close();
 			if (conn!=null) conn.close();
-		
 		}			
-		
+
+		//--------------------------------
+        //tests de la primera transacción
+        //--------------------------------
+        System.out.println("\n Tests primera transacción (realizar donación)");
+
+        //Test 1
+        System.out.println("\nTest 1: Cantidad negativa -> excepcion codigo 5");
+        try {
+            realizar_donacion("12345678A", 1, -0.1f,
+                    new java.util.Date());
+            System.out.println("Error: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("Bien - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+        }
+
+        //Test 2
+        System.out.println("\nTest 2: Cantidad > 0.45 -> excepción código 5");
+        try {
+            realizar_donacion("12345678A", 1, 0.50f,
+                    new java.util.Date());
+            System.out.println("Error: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("Bien - código: " + e.getErrorCode() + " | " + e.getMessage());
+        }
+
+        //Test 3
+        System.out.println("\nTest 3: NIF no existe -> excepcion codigo 1");
+        try {
+            realizar_donacion("00000000Z", 1, 0.25f,
+                    new java.util.Date());
+            System.out.println("Error: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("Bien - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+        }
+
+        //Test 4
+        System.out.println("\nTest 4: Hospital no existe -> excepción código 3");
+        try {
+            realizar_donacion("12345678A", 9999, 0.25f,
+                    new java.util.Date());
+            System.out.println("Error: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("Bien - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+        }
+
+        //Test 5
+        //El donante 12345678A tiene su última donación el 15/01/2025, intentamos donar el 20/01/2025 (5 dias, tendría que saltar la excepción)
+        System.out.println("\nTest 5: Donacion en menos de 15 dias -> excepcion codigo 4");
+        try {
+            Date fechaNueva = Misc.addDays(
+                    new java.sql.Date(new java.text.SimpleDateFormat("dd/MM/yyyy")
+                            .parse("15/01/2025").getTime()), 5);
+            realizar_donacion("12345678A", 1, 0.25f, fechaNueva);
+            System.out.println("Error: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("Bien - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+
+        //Test 6
+        //lo mismo de antes, pero aquí deberia funcionar
+        System.out.println("\nTest 6: Donacion correcta -> sin excepcion");
+        try {
+            Date fechaValida = Misc.addDays(
+                    new java.sql.Date(new java.text.SimpleDateFormat("dd/MM/yyyy")
+                            .parse("25/01/2025").getTime()), 26);
+            realizar_donacion("98989898C", 1, 0.30f, fechaValida);
+            System.out.println("Bien - donacion realizada correctamente");
+        } catch (Exception e) {
+            System.out.println("Error inesperado: " + e.getMessage());
+        }
+        //Y esto cubre todos los casos de error
+
+        //--------------------------------
+        //Fin de tests de la primera transacción
+        //--------------------------------
 	}
 }
