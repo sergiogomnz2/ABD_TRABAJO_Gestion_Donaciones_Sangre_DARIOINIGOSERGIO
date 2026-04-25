@@ -370,7 +370,7 @@ public class EsqueletoGestionDonacionesSangre {
 		}			
 
 		//--------------------------------
-        //tests de la primera transacción
+        //tests de la primera transacción: realizar_donacion
         //--------------------------------
         System.out.println("\n Tests primera transacción (realizar donación)");
 
@@ -442,9 +442,102 @@ public class EsqueletoGestionDonacionesSangre {
             System.out.println("Error inesperado: " + e.getMessage());
         }
         //Y esto cubre todos los casos de error
-
-        //--------------------------------
         //Fin de tests de la primera transacción
+
+		
+        //--------------------------------
+		//--------------------------------
+
+		
+		//--------------------------------
+        //test de la segunda transaccion: anular_traspaso.
+        //--------------------------------
+        System.out.println("\n===== TESTS anular_traspaso =====");
+
+        // -- Reiniciar datos --
+        try {
+            conn = pool.getConnection();
+            cll_reinicia = conn.prepareCall("{call inicializa_test}");
+            cll_reinicia.execute();
+        } catch (SQLException e) {
+            logger.error(e.getMessage());
+        } finally {
+            if (cll_reinicia != null) cll_reinicia.close();
+            if (conn != null) conn.close();
+        }
+
+        //Test 7: Usaremos para comprobar un tipo de sangre inexistente | codigo 2.
+        System.out.println("\n[TEST 7] Tipo sangre inexistente -> excepcion codigo 2");
+        try {
+            anular_traspaso(9999, 1, 2,
+                    new java.sql.Date(new java.text.SimpleDateFormat("dd/MM/yyyy")
+                            .parse("11/01/2025").getTime()));
+            System.out.println("ERROR: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("OK - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+
+        //Test 8: Usaremos para comprobar hospital origen inexistente | codigo 3.
+        System.out.println("\n[TEST 8] Hospital origen inexistente -> excepcion codigo 3");
+        try {
+            anular_traspaso(1, 9999, 2,
+                    new java.sql.Date(new java.text.SimpleDateFormat("dd/MM/yyyy")
+                            .parse("11/01/2025").getTime()));
+            System.out.println("ERROR: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("OK - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+
+        //Test 9: Usaremos para comprobar hospital destino inexistente | codigo 4.
+        System.out.println("\n[TEST 9] Hospital destino inexistente -> excepcion codigo 3");
+        try {
+            anular_traspaso(1, 1, 9999,
+                    new java.sql.Date(new java.text.SimpleDateFormat("dd/MM/yyyy")
+                            .parse("11/01/2025").getTime()));
+            System.out.println("ERROR: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("OK - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+
+        //Test 10: Usaremos para comprobar un posible traspaso con datos erroneos/ inexistencia de parametros | codigo 6.
+        System.out.println("\n[TEST 10] Sin traspasos para esa fecha -> excepcion codigo 6");
+        try {
+            anular_traspaso(1, 1, 2,
+                    new java.sql.Date(new java.text.SimpleDateFormat("dd/MM/yyyy")
+                            .parse("01/01/2000").getTime())); // fecha que no existe
+            System.out.println("ERROR: no lanzó excepción");
+        } catch (GestionDonacionesSangreException e) {
+            System.out.println("OK - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+
+        //Test 11: Usaremos para testear un anulacion correcta
+        //Aqui lo que hemos hecho es hacer que el SQL de ejemplo inserte traspaso: tipo=1, origen=1, destino=2, fecha=11/01/2025
+        System.out.println("\n[TEST 11] Anulacion correcta -> sin excepcion");
+        try {
+            anular_traspaso(1, 1, 2,
+                    new java.sql.Date(new java.text.SimpleDateFormat("dd/MM/yyyy")
+                            .parse("11/01/2025").getTime()));
+            System.out.println("OK - traspaso anulado correctamente");
+        } catch (Exception e) {
+            System.out.println("ERROR inesperado: " + e.getMessage());
+        }
+		 //Fin de tests de la segunda transacción
+
+		
+        //--------------------------------
+		//--------------------------------
+
+
+		//--------------------------------
+        //test de la tercera transaccion: consulta_traspaso.
         //--------------------------------
 	}
 }
