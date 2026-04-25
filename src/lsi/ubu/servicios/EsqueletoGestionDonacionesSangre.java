@@ -321,7 +321,7 @@ public class EsqueletoGestionDonacionesSangre {
             try { if (con               != null) con.close();               } catch (SQLException e) { logger.error(e.getMessage()); }
         }
     }
-	//Transacion 3: consuklta_traspasos
+	//Transacion 3: consulta_traspasos
 	public static void consulta_traspasos(String m_Tipo_Sangre)
 			throws SQLException {
 
