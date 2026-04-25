@@ -2,6 +2,8 @@ package lsi.ubu.enunciado;
 
 import java.sql.CallableStatement;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Date;
 
@@ -166,29 +168,160 @@ public class EsqueletoGestionDonacionesSangre {
 		
 	}
 	
+	//Transaccion 2: anular_traspaso
 	public static void anular_traspaso(int m_ID_Tipo_Sangre, int m_ID_Hospital_Origen,int m_ID_Hospital_Destino,
 			Date m_Fecha_Traspaso)
 			throws SQLException {
 		
 		PoolDeConexiones pool = PoolDeConexiones.getInstance();
 		Connection con=null;
-
+				
+		PreparedStatement psCheckTipoSangre  = null;
+        PreparedStatement psCheckHospOrigen  = null;
+        PreparedStatement psCheckHospDestino = null;
+        PreparedStatement psSelectTraspasos  = null;
+        PreparedStatement psRestaDestino     = null;
+        PreparedStatement psSumaOrigen       = null;
+        PreparedStatement psDelete           = null;
+        ResultSet rs = null;
 	
-		try{
-			con = pool.getConnection();
-			//Completar por el alumno
-			
-		} catch (SQLException e) {
-			//Completar por el alumno			
-			
-			logger.error(e.getMessage());
-			throw e;		
+		try {
+            con = pool.getConnection();
 
-		} finally {
-			/*A rellenar por el alumno*/
-		}		
-	}
-	
+            //Verficamos que el tipo de sangre si que existe
+            psCheckTipoSangre = con.prepareStatement(
+                    "SELECT COUNT(*) FROM tipo_sangre WHERE id_tipo_sangre = ?");
+            psCheckTipoSangre.setInt(1, m_ID_Tipo_Sangre);
+            rs = psCheckTipoSangre.executeQuery();
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                throw new GestionDonacionesSangreException(
+                        GestionDonacionesSangreException.TIPO_SANGRE_NO_EXISTE);
+            }
+            rs.close();  rs = null;
+            psCheckTipoSangre.close(); psCheckTipoSangre = null;
+
+            //Verifricamos que el hospital de origen si que existe
+            psCheckHospOrigen = con.prepareStatement(
+                    "SELECT COUNT(*) FROM hospital WHERE id_hospital = ?");
+            psCheckHospOrigen.setInt(1, m_ID_Hospital_Origen);
+            rs = psCheckHospOrigen.executeQuery();
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                throw new GestionDonacionesSangreException(
+                        GestionDonacionesSangreException.HOSPITAL_NO_EXISTE);
+            }
+            rs.close();  rs = null;
+            psCheckHospOrigen.close(); psCheckHospOrigen = null;
+
+            //Verificamos que el hospital de destino si que existe
+            psCheckHospDestino = con.prepareStatement(
+                    "SELECT COUNT(*) FROM hospital WHERE id_hospital = ?");
+            psCheckHospDestino.setInt(1, m_ID_Hospital_Destino);
+            rs = psCheckHospDestino.executeQuery();
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                throw new GestionDonacionesSangreException(
+                        GestionDonacionesSangreException.HOSPITAL_NO_EXISTE);
+            }
+            rs.close();  rs = null;
+            psCheckHospDestino.close(); psCheckHospDestino = null;
+
+            //Utilizando Sentencias Preparadas miramos que los traspasos coinciden con los parametros
+            //Necesitamos las cantidades antes de borrar para poder revertir reservas
+            psSelectTraspasos = con.prepareStatement(
+                    "SELECT cantidad FROM traspaso "
+                  + "WHERE id_tipo_sangre = ? "
+                  + "  AND id_hospital_origen = ? "
+                  + "  AND id_hospital_destino = ? "
+                  + "  AND fecha_traspaso = ?");
+            psSelectTraspasos.setInt(1, m_ID_Tipo_Sangre);
+            psSelectTraspasos.setInt(2, m_ID_Hospital_Origen);
+            psSelectTraspasos.setInt(3, m_ID_Hospital_Destino);
+            psSelectTraspasos.setDate(4, new java.sql.Date(m_Fecha_Traspaso.getTime()));
+            rs = psSelectTraspasos.executeQuery();
+
+            //Declaramos Sentencias Preparadas para la actulizacion de las reservas del hospital Origen y Destino
+            psRestaDestino = con.prepareStatement(
+                    "UPDATE reserva_hospital "
+                  + "SET cantidad = cantidad - ? "
+                  + "WHERE id_tipo_sangre = ? AND id_hospital = ?");
+
+            psSumaOrigen = con.prepareStatement(
+                    "UPDATE reserva_hospital "
+                  + "SET cantidad = cantidad + ? "
+                  + "WHERE id_tipo_sangre = ? AND id_hospital = ?");
+
+            boolean hayFilas = false;
+            while (rs.next()) {
+                hayFilas = true;
+                float cantidad = rs.getFloat("cantidad");
+
+                if (cantidad < 0) {
+                    throw new GestionDonacionesSangreException(
+                            GestionDonacionesSangreException.VALOR_CANTIDAD_TRASPASO_INCORRECTO);
+                }
+
+                //Restamos de Hospital Destino la cantidad y tipo de sangre usado
+                psRestaDestino.setFloat(1, cantidad);
+                psRestaDestino.setInt(2, m_ID_Tipo_Sangre);
+                psRestaDestino.setInt(3, m_ID_Hospital_Destino);
+                psRestaDestino.executeUpdate();
+
+                //Sumamos al Hospital Origen la cantidad y tipo de sangre usado
+                psSumaOrigen.setFloat(1, cantidad);
+                psSumaOrigen.setInt(2, m_ID_Tipo_Sangre);
+                psSumaOrigen.setInt(3, m_ID_Hospital_Origen);
+                psSumaOrigen.executeUpdate();
+            }
+            rs.close();  rs = null;
+            psSelectTraspasos.close(); psSelectTraspasos = null;
+
+            //Excepcion en caso de que no haya ningun traspaso con esos criterios
+            if (!hayFilas) {
+                throw new GestionDonacionesSangreException(
+                        GestionDonacionesSangreException.VALOR_CANTIDAD_TRASPASO_INCORRECTO);
+            }
+
+            //Eliminamos aquellos traspasos que ya hayan sido procesados
+            psDelete = con.prepareStatement(
+                    "DELETE FROM traspaso "
+                  + "WHERE id_tipo_sangre = ? "
+                  + "  AND id_hospital_origen = ? "
+                  + "  AND id_hospital_destino = ? "
+                  + "  AND fecha_traspaso = ?");
+            psDelete.setInt(1, m_ID_Tipo_Sangre);
+            psDelete.setInt(2, m_ID_Hospital_Origen);
+            psDelete.setInt(3, m_ID_Hospital_Destino);
+            psDelete.setDate(4, new java.sql.Date(m_Fecha_Traspaso.getTime()));
+            psDelete.executeUpdate();
+            psDelete.close(); psDelete = null;
+
+            //commit
+            con.commit();
+
+        } catch (SQLException e) {
+            if (con != null) {
+                try { con.rollback(); } catch (SQLException ex) {
+                    logger.error("Error en rollback: " + ex.getMessage());
+                }
+            }
+            logger.error(e.getMessage());
+            throw e;
+
+        } finally {
+            try { if (rs                != null) rs.close();                } catch (SQLException e) { logger.error(e.getMessage()); }
+            try { if (psCheckTipoSangre != null) psCheckTipoSangre.close(); } catch (SQLException e) { logger.error(e.getMessage()); }
+            try { if (psCheckHospOrigen != null) psCheckHospOrigen.close(); } catch (SQLException e) { logger.error(e.getMessage()); }
+            try { if (psCheckHospDestino!= null) psCheckHospDestino.close();} catch (SQLException e) { logger.error(e.getMessage()); }
+            try { if (psSelectTraspasos != null) psSelectTraspasos.close(); } catch (SQLException e) { logger.error(e.getMessage()); }
+            try { if (psRestaDestino    != null) psRestaDestino.close();    } catch (SQLException e) { logger.error(e.getMessage()); }
+            try { if (psSumaOrigen      != null) psSumaOrigen.close();      } catch (SQLException e) { logger.error(e.getMessage()); }
+            try { if (psDelete          != null) psDelete.close();          } catch (SQLException e) { logger.error(e.getMessage()); }
+            try { if (con               != null) con.close();               } catch (SQLException e) { logger.error(e.getMessage()); }
+        }
+    }
+	//Transacion 3: consuklta_traspasos
 	public static void consulta_traspasos(String m_Tipo_Sangre)
 			throws SQLException {
 
