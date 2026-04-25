@@ -328,20 +328,94 @@ public class EsqueletoGestionDonacionesSangre {
 				
 		PoolDeConexiones pool = PoolDeConexiones.getInstance();
 		Connection con=null;
-
+				
+		PreparedStatement psCheckTipo = null;
+		PreparedStatement psConsulta  = null;
+		ResultSet rs  = null;
+		ResultSet rs2 = null;
 	
 		try{
 			con = pool.getConnection();
-			//Completar por el alumno
+			// --- Verificar que el tipo de sangre existe (por descripción) ---
+			psCheckTipo = con.prepareStatement(
+         			"SELECT COUNT(*) FROM tipo_sangre WHERE descripcion = ?");
+ 			psCheckTipo.setString(1, m_Tipo_Sangre);
+ 			rs = psCheckTipo.executeQuery();
+ 			rs.next();
+ 			if (rs.getInt(1) == 0) {
+     			throw new GestionDonacionesSangreException(
+             			GestionDonacionesSangreException.TIPO_SANGRE_NO_EXISTE);
+ 			}
+ 			rs.close();  rs = null;
+ 			psCheckTipo.close(); psCheckTipo = null;
+
+ 			// --- Consulta principal con todos los joins requeridos ---
+ 			// Ordenada por id_hospital_destino y fecha_traspaso según el enunciado
+ 			psConsulta = con.prepareStatement(
+         			"SELECT t.id_traspaso, "
+       			  + "       ts.id_tipo_sangre, ts.descripcion, "
+       			  + "       h_ori.id_hospital  AS id_hosp_origen,  h_ori.nombre  AS nombre_origen,  h_ori.localidad  AS localidad_origen, "
+       			  + "       h_dst.id_hospital  AS id_hosp_destino, h_dst.nombre  AS nombre_destino, h_dst.localidad  AS localidad_destino, "
+       			  + "       rh_ori.cantidad    AS reserva_origen, "
+       			  + "       rh_dst.cantidad    AS reserva_destino, "
+       			  + "       t.cantidad         AS cantidad_traspaso, "
+       			  + "       t.fecha_traspaso "
+       			  + "FROM traspaso t "
+       			  + "JOIN tipo_sangre ts  ON t.id_tipo_sangre      = ts.id_tipo_sangre "
+       			  + "JOIN hospital h_ori  ON t.id_hospital_origen  = h_ori.id_hospital "
+       			  + "JOIN hospital h_dst  ON t.id_hospital_destino = h_dst.id_hospital "
+       			  + "JOIN reserva_hospital rh_ori "
+       			  + "     ON t.id_tipo_sangre = rh_ori.id_tipo_sangre AND t.id_hospital_origen  = rh_ori.id_hospital "
+       			  + "LEFT JOIN reserva_hospital rh_dst "
+       			  + "     ON t.id_tipo_sangre = rh_dst.id_tipo_sangre AND t.id_hospital_destino = rh_dst.id_hospital "
+       			  + "WHERE ts.descripcion = ? "
+       			  + "ORDER BY t.id_hospital_destino, t.fecha_traspaso");
+ 			psConsulta.setString(1, m_Tipo_Sangre);
+ 			rs2 = psConsulta.executeQuery();
+
+ 			// --- Mostrar resultados por salida estándar ---
+ 			System.out.println("\n=== TRASPASOS - Tipo de sangre: " + m_Tipo_Sangre + " ===");
+ 			System.out.printf("%-6s %-10s %-35s %-35s %-12s %-12s %-10s %-12s%n",
+         			"ID_T", "TIPO", "HOSPITAL ORIGEN", "HOSPITAL DESTINO",
+         			"RES.ORIGEN", "RES.DESTINO", "CANTIDAD", "FECHA");
+ 			System.out.println("-".repeat(130));
+
+ 			while (rs2.next()) {
+     			String resDestino = (rs2.getString("reserva_destino") != null)
+             			? String.format("%.2f", rs2.getFloat("reserva_destino"))
+             			: "N/A";
+     			System.out.printf("%-6d %-10s %-35s %-35s %-12.2f %-12s %-10.2f %-12s%n",
+             			rs2.getInt("id_traspaso"),
+             			rs2.getString("descripcion"),
+             			rs2.getString("nombre_origen"),
+             			rs2.getString("nombre_destino"),
+             			rs2.getFloat("reserva_origen"),
+             			resDestino,
+             			rs2.getFloat("cantidad_traspaso"),
+             			rs2.getDate("fecha_traspaso").toString());
+ 			}
+ 			System.out.println("=== FIN LISTADO ===\n");
+
+ 			rs2.close();  rs2 = null;
+ 			psConsulta.close(); psConsulta = null;
+
+ 			con.commit();
 			
 		} catch (SQLException e) {
-			//Completar por el alumno			
-			
+			if (con != null) {
+    			try { con.rollback(); } catch (SQLException ex) {
+        			logger.error("Error en rollback: " + ex.getMessage());
+   				}
+			}			
 			logger.error(e.getMessage());
 			throw e;		
 
 		} finally {
-			/*A rellenar por el alumno*/
+			try { if (rs        != null) rs.close();        } catch (SQLException e) { logger.error(e.getMessage()); }
+    		try { if (rs2       != null) rs2.close();       } catch (SQLException e) { logger.error(e.getMessage()); }
+    		try { if (psCheckTipo!= null) psCheckTipo.close();} catch (SQLException e) { logger.error(e.getMessage()); }
+    		try { if (psConsulta != null) psConsulta.close(); } catch (SQLException e) { logger.error(e.getMessage()); }
+    		try { if (con        != null) con.close();        } catch (SQLException e) { logger.error(e.getMessage()); }
 		}		
 	}
 	
@@ -539,5 +613,36 @@ public class EsqueletoGestionDonacionesSangre {
 		//--------------------------------
         //test de la tercera transaccion: consulta_traspaso.
         //--------------------------------
-	}
-}
+	    System.out.println("\n===== TESTS consulta_traspasos =====");
+
+    	// -- Reiniciar datos --
+    	try {
+       		conn = pool.getConnection();
+        	cll_reinicia = conn.prepareCall("{call inicializa_test}");
+        	cll_reinicia.execute();
+    	} catch (SQLException e) {
+        	logger.error(e.getMessage());
+    	} finally {
+       		if (cll_reinicia != null) cll_reinicia.close();
+        	if (conn != null) conn.close();
+    	}
+
+    	// TEST 12 - EXCEPCIÓN código 2: descripción de tipo de sangre que no existe
+    	System.out.println("\n[TEST 12] Tipo sangre inexistente -> excepcion codigo 2");
+    	try {
+        	consulta_traspasos("Tipo Z.");
+        	System.out.println("ERROR: no lanzó excepción");
+    	} catch (GestionDonacionesSangreException e) {
+        	System.out.println("OK - codigo: " + e.getErrorCode() + " | " + e.getMessage());
+    	}
+
+    	// TEST 13 - CASO NORMAL: consulta con resultados
+    	System.out.println("\n[TEST 13] Consulta Tipo A. -> debe mostrar traspasos");
+    	consulta_traspasos("Tipo A.");
+
+    	// TEST 14 - CASO EXTREMO: tipo de sangre que existe pero sin traspasos
+    	// Según los datos de ejemplo, Tipo O. no tiene traspasos registrados
+    	System.out.println("\n[TEST 14] Consulta Tipo O. -> existe pero sin traspasos");
+    	consulta_traspasos("Tipo O.");
+	}}
+
