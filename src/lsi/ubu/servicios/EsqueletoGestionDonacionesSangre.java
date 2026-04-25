@@ -336,7 +336,7 @@ public class EsqueletoGestionDonacionesSangre {
 	
 		try{
 			con = pool.getConnection();
-			// --- Verificar que el tipo de sangre existe (por descripción) ---
+			//Verificar que el tipo de sangre existe
 			psCheckTipo = con.prepareStatement(
          			"SELECT COUNT(*) FROM tipo_sangre WHERE descripcion = ?");
  			psCheckTipo.setString(1, m_Tipo_Sangre);
@@ -349,8 +349,8 @@ public class EsqueletoGestionDonacionesSangre {
  			rs.close();  rs = null;
  			psCheckTipo.close(); psCheckTipo = null;
 
- 			// --- Consulta principal con todos los joins requeridos ---
- 			// Ordenada por id_hospital_destino y fecha_traspaso según el enunciado
+ 			//Consulta principal con todos los joins requeridos
+ 			// Ordenada por id_hospital_destino y fecha_traspaso
  			psConsulta = con.prepareStatement(
          			"SELECT t.id_traspaso, "
        			  + "       ts.id_tipo_sangre, ts.descripcion, "
@@ -373,7 +373,7 @@ public class EsqueletoGestionDonacionesSangre {
  			psConsulta.setString(1, m_Tipo_Sangre);
  			rs2 = psConsulta.executeQuery();
 
- 			// --- Mostrar resultados por salida estándar ---
+ 			//Mostrar resultados por salida estándar
  			System.out.println("\n=== TRASPASOS - Tipo de sangre: " + m_Tipo_Sangre + " ===");
  			System.out.printf("%-6s %-10s %-35s %-35s %-12s %-12s %-10s %-12s%n",
          			"ID_T", "TIPO", "HOSPITAL ORIGEN", "HOSPITAL DESTINO",
@@ -615,7 +615,7 @@ public class EsqueletoGestionDonacionesSangre {
         //--------------------------------
 	    System.out.println("\n===== TESTS consulta_traspasos =====");
 
-    	// -- Reiniciar datos --
+    	//Reiniciar datos
     	try {
        		conn = pool.getConnection();
         	cll_reinicia = conn.prepareCall("{call inicializa_test}");
