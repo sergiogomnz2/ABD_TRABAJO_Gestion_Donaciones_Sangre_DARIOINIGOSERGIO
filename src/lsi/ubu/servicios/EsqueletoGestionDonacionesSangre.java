@@ -644,5 +644,6 @@ public class EsqueletoGestionDonacionesSangre {
     	// Según los datos de ejemplo, Tipo O. no tiene traspasos registrados
     	System.out.println("\n[TEST 14] Consulta Tipo O. -> existe pero sin traspasos");
     	consulta_traspasos("Tipo O.");
-	}}
+	}
+}
 
