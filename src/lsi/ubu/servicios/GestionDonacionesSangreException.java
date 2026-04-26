@@ -3,10 +3,7 @@ package lsi.ubu.enunciado;
 import lsi.ubu.servicios.Misc;
 import lsi.ubu.util.PoolDeConexiones;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.util.Date;
+import lsi.ubu.servicios.GestionDonacionesSangreException;
 
 import java.sql.SQLException;
 import org.slf4j.Logger;
